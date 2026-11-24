@@ -1,0 +1,22 @@
+{
+  "name": "realtime-collaboration-frontend",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "node --test lib/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "15.5.29",
+    "react": "19.1.10",
+    "react-dom": "19.1.10"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.1",
+    "@types/react": "19.1.8",
+    "@types/react-dom": "19.1.6",
+    "typescript": "5.8.3"
+  }
+}
