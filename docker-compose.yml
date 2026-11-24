@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_DB: collab
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: pg_isready -U postgres
+      interval: 2s
+      retries: 20
+  redis:
+    image: redis:7
+  # two API instances share edits through Redis; open the UI against either one
+  api:
+    build: backend
+    environment: &api_env
+      DATABASE_URL: postgresql://postgres@postgres:5432/collab
+      REDIS_URL: redis://redis:6379
+      CORS_ORIGINS: http://localhost:3000
+    ports: ["8000:8000"]
+    depends_on: &api_deps
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+  api2:
+    build: backend
+    environment: *api_env
+    ports: ["8001:8000"]
+    depends_on: *api_deps
+  web:
+    build:
+      context: frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports: ["3000:3000"]
+    depends_on: [api]
+volumes:
+  pgdata:
