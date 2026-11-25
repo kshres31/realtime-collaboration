@@ -67,11 +67,11 @@ services:
     branch: main
     healthCheckPath: /api/v1/health
     dockerCommand: >-
-      sh -c 'export INVENTORY_DB_URL=jdbc:postgresql://$DB_HOST:$DB_PORT/$DB_NAME;
+      export INVENTORY_DB_URL=jdbc:postgresql://$DB_HOST:$DB_PORT/$DB_NAME;
       run() { java -cp "app.jar:lib/*" com.kshres31.inventory.InventoryApplication "$@"; };
       run migrate &&
       { echo "$INVENTORY_ADMIN_PASSWORD" | run bootstrap-admin admin.demo || true; } &&
-      exec java -cp "app.jar:lib/*" com.kshres31.inventory.InventoryApplication serve'
+      exec java -cp "app.jar:lib/*" com.kshres31.inventory.InventoryApplication serve
     envVars:
       - key: PORT
         value: "8080"
@@ -98,11 +98,11 @@ services:
     branch: main
     healthCheckPath: /health
     dockerCommand: >-
-      sh -c 'python -c "import os, psycopg; psycopg.connect(os.environ[\"DATABASE_URL\"], autocommit=True).execute(\"CREATE SCHEMA IF NOT EXISTS parking\")" &&
+      python -c "import os, psycopg; psycopg.connect(os.environ['DATABASE_URL'], autocommit=True).execute('CREATE SCHEMA IF NOT EXISTS parking')" &&
       export DATABASE_URL="$DATABASE_URL?options=-csearch_path%3Dparking" &&
       python -m parking.migrate && python -m scripts.seed_demo &&
       { python -m parking.worker & } &&
-      exec uvicorn parking.app:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips="*"'
+      exec uvicorn parking.app:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips="*"
     envVars:
       - key: PORT
         value: "8000"
