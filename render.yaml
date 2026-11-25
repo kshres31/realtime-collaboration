@@ -2,6 +2,7 @@
 # shortcut: the free plan allows one Postgres per workspace, so the apps share it
 # (parking uses its own schema to avoid a schema_migration name clash); upgrade to
 # one paid database per app if any of them needs real isolation.
+# Render passes everything after `sh -c ` to sh as one argument, so no outer quotes.
 # shortcut: free web services have no background workers, so each worker runs
 # in its app's container; move to a Background Worker on a paid plan.
 databases:
@@ -67,7 +68,7 @@ services:
     branch: main
     healthCheckPath: /api/v1/health
     dockerCommand: >-
-      export INVENTORY_DB_URL=jdbc:postgresql://$DB_HOST:$DB_PORT/$DB_NAME;
+      sh -c export INVENTORY_DB_URL=jdbc:postgresql://$DB_HOST:$DB_PORT/$DB_NAME;
       run() { java -cp "app.jar:lib/*" com.kshres31.inventory.InventoryApplication "$@"; };
       run migrate &&
       { echo "$INVENTORY_ADMIN_PASSWORD" | run bootstrap-admin admin.demo || true; } &&
@@ -98,7 +99,7 @@ services:
     branch: main
     healthCheckPath: /health
     dockerCommand: >-
-      python -c "import os, psycopg; psycopg.connect(os.environ['DATABASE_URL'], autocommit=True).execute('CREATE SCHEMA IF NOT EXISTS parking')" &&
+      sh -c python -c "import os, psycopg; psycopg.connect(os.environ['DATABASE_URL'], autocommit=True).execute('CREATE SCHEMA IF NOT EXISTS parking')" &&
       export DATABASE_URL="$DATABASE_URL?options=-csearch_path%3Dparking" &&
       python -m parking.migrate && python -m scripts.seed_demo &&
       { python -m parking.worker & } &&
