@@ -1,0 +1,118 @@
+# One Blueprint for all four resume projects, all on free plans.
+# shortcut: the free plan allows one Postgres per workspace, so the apps share it
+# (parking uses its own schema to avoid a schema_migration name clash; it is last on the
+# role's search_path because the app's own connection options override the URL's); upgrade to
+# one paid database per app if any of them needs real isolation.
+# Render passes everything after `sh -c ` to sh as one argument, so no outer quotes.
+# shortcut: free web services have no background workers, so each worker runs
+# in its app's container; move to a Background Worker on a paid plan.
+databases:
+  - name: resume-projects-db
+    plan: free
+    region: oregon
+    postgresMajorVersion: "16"
+    ipAllowList: []
+
+services:
+  - type: keyvalue
+    name: resume-projects-kv
+    plan: free
+    region: oregon
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
+
+  # Realtime collaborative editor
+  - type: web
+    name: kshres-collab-api
+    runtime: docker
+    plan: free
+    region: oregon
+    repo: https://github.com/kshres31/realtime-collaboration
+    branch: main
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: DATABASE_URL
+        fromDatabase: {name: resume-projects-db, property: connectionString}
+      - key: REDIS_URL
+        fromService: {type: keyvalue, name: resume-projects-kv, property: connectionString}
+      - key: CORS_ORIGINS
+        value: https://kshres-collab-web.onrender.com
+
+  - type: web
+    name: kshres-collab-web
+    runtime: docker
+    plan: free
+    region: oregon
+    repo: https://github.com/kshres31/realtime-collaboration
+    branch: main
+    dockerContext: ./frontend
+    dockerfilePath: ./frontend/Dockerfile
+    envVars:
+      - key: NEXT_PUBLIC_API_URL # passed to the Docker build as a build arg
+        value: https://kshres-collab-api.onrender.com
+      - key: PORT
+        value: "3000"
+      - key: HOSTNAME
+        value: 0.0.0.0
+
+  # Inventory management HTTP API
+  - type: web
+    name: kshres-inventory-api
+    runtime: docker
+    plan: free
+    region: oregon
+    repo: https://github.com/kshres31/intelligent-inventory-management-system
+    branch: main
+    healthCheckPath: /api/v1/health
+    dockerCommand: >-
+      sh -c export INVENTORY_DB_URL=jdbc:postgresql://$DB_HOST:$DB_PORT/$DB_NAME;
+      run() { java -cp "app.jar:lib/*" com.kshres31.inventory.InventoryApplication "$@"; };
+      run migrate &&
+      { echo "$INVENTORY_ADMIN_PASSWORD" | run bootstrap-admin admin.demo || true; } &&
+      exec java -cp "app.jar:lib/*" com.kshres31.inventory.InventoryApplication serve
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: DB_HOST
+        fromDatabase: {name: resume-projects-db, property: host}
+      - key: DB_PORT
+        fromDatabase: {name: resume-projects-db, property: port}
+      - key: DB_NAME
+        fromDatabase: {name: resume-projects-db, property: database}
+      - key: INVENTORY_DB_USER
+        fromDatabase: {name: resume-projects-db, property: user}
+      - key: INVENTORY_DB_PASSWORD
+        fromDatabase: {name: resume-projects-db, property: password}
+      - key: INVENTORY_ADMIN_PASSWORD # sign in as admin.demo with this
+        generateValue: true
+
+  # Parking marketplace
+  - type: web
+    name: kshres-parking
+    runtime: docker
+    plan: free
+    region: oregon
+    repo: https://github.com/kshres31/parking-marketplace
+    branch: main
+    healthCheckPath: /health
+    dockerCommand: >-
+      sh -c python -c "import os, psycopg; psycopg.connect(os.environ['DATABASE_URL'], autocommit=True).execute('CREATE SCHEMA IF NOT EXISTS parking; ALTER ROLE CURRENT_USER SET search_path = \"\$user\", public, parking')" &&
+      export DATABASE_URL="$DATABASE_URL?options=-csearch_path%3Dparking" &&
+      python -m parking.migrate && python -m scripts.seed_demo &&
+      { python -m parking.worker & } &&
+      exec uvicorn parking.app:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips="*"
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: DATABASE_URL
+        fromDatabase: {name: resume-projects-db, property: connectionString}
+      - key: PUBLIC_URL
+        value: https://kshres-parking.onrender.com
+      - key: COOKIE_SECURE
+        value: "1"
+      - key: PAYMENTS_MODE
+        value: demo
